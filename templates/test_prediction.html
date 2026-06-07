@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Disease Prediction Test</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        textarea { width: 100%; height: 100px; }
+        button { padding: 10px 20px; font-size: 16px; }
+        .response { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 5px; white-space: pre-wrap; max-height: 600px; overflow: auto; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Disease Prediction - Test</h1>
+    
+    <h2>Input:</h2>
+    <textarea id="input" placeholder="Enter symptoms...">I have fever and cough</textarea>
+    <br><br>
+    
+    <button onclick="test()">Test /search_predict</button>
+    <button onclick="testCSV()">Test /api/csv/search_predict</button>
+    <button onclick="clearAll()">Clear</button>
+    
+    <h2>Response:</h2>
+    <div id="response" class="response"></div>
+    
+    <script>
+        function test() {
+            const text = document.getElementById('input').value;
+            console.log('Testing /search_predict with:', text);
+            
+            fetch('/search_predict', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            })
+            .then(r => r.json())
+            .then(data => {
+                console.log('Response:', data);
+                showResponse(data, '/search_predict');
+            })
+            .catch(e => showError(e));
+        }
+        
+        function testCSV() {
+            const text = document.getElementById('input').value;
+            console.log('Testing /api/csv/search_predict with:', text);
+            
+            fetch('/api/csv/search_predict', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            })
+            .then(r => r.json())
+            .then(data => {
+                console.log('Response:', data);
+                showResponse(data, '/api/csv/search_predict');
+            })
+            .catch(e => showError(e));
+        }
+        
+        function showResponse(data, endpoint) {
+            const div = document.getElementById('response');
+            const success = data.success ? '<span class="success">SUCCESS ✓</span>' : '<span class="error">FAILED ✗</span>';
+            
+            div.innerHTML = success + '\n\nEndpoint: ' + endpoint + '\n\n' + JSON.stringify(data, null, 2);
+        }
+        
+        function showError(error) {
+            document.getElementById('response').innerHTML = '<span class="error">ERROR: ' + error.message + '</span>';
+        }
+        
+        function clearAll() {
+            document.getElementById('input').value = '';
+            document.getElementById('response').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symptom Checker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            color: #222;
+            margin: 0;
+            padding: 0;
+        }
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+            margin-top: 20px;
+            padding: 20px;
+        }
+        h1, h2 {
+            margin: 0 0 16px 0;
+        }
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 14px;
+            border: 1px solid #ccd6e0;
+            border-radius: 10px;
+            resize: vertical;
+            font-size: 16px;
+        }
+        button {
+            background: #2f80ed;
+            border: none;
+            color: white;
+            padding: 14px 22px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 12px;
+        }
+        button:hover {
+            background: #1f68d5;
+        }
+        .info-row {
+            margin: 12px 0;
+        }
+        .info-row strong {
+            display: inline-block;
+            width: 140px;
+        }
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .tag {
+            background: #eef6ff;
+            color: #174ea6;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 14px;
+        }
+        .section-title {
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-size: 20px;
+        }
+        .alert {
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-top: 16px;
+        }
+        .alert.error {
+            background: #ffe7e5;
+            color: #b43f36;
+        }
+        .alert.success {
+            background: #e8f7ee;
+            color: #1d6a3f;
+        }
+        .loading {
+            display: none;
+            margin-top: 16px;
+            color: #3366cc;
+        }
+        .result-card {
+            background: #f8fafc;
+            border: 1px solid #dde6f0;
+            border-radius: 12px;
+            padding: 18px;
+            margin-top: 16px;
+        }
+        .result-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        .result-card p {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="card">
+            <h1>Symptom Checker</h1>
+            <p>Enter your symptoms in free text and get a prediction with suggestions and advice.</p>
+            <textarea id="symptomInput" placeholder="Describe what you are feeling, for example: I have fever, cough, and sore throat."></textarea>
+            <button id="submitBtn" onclick="submitSymptoms()">Analyze Symptoms</button>
+            <div id="loading" class="loading">⏳ Analyzing symptoms...</div>
+            <div id="message"></div>
+        </div>
+
+        <div id="results" class="card" style="display:none;"></div>
+    </div>
+
+    <script>
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.innerHTML = `<div class="alert ${type}">${text}</div>`;
+        }
+
+        function clearMessage() {
+            document.getElementById('message').innerHTML = '';
+        }
+
+        function showLoading(active) {
+            document.getElementById('loading').style.display = active ? 'block' : 'none';
+        }
+
+        function normalizePredictions(data) {
+            if (Array.isArray(data.suggestions_and_advice) && data.suggestions_and_advice.length) {
+                return data.suggestions_and_advice;
+            }
+            if (Array.isArray(data.predictions) && data.predictions.length) {
+                return data.predictions;
+            }
+            if (Array.isArray(data.top_predictions) && data.top_predictions.length) {
+                return data.top_predictions;
+            }
+            return [];
+        }
+
+        function formatConfidence(prediction) {
+            if (prediction.confidence_percentage) {
+                return prediction.confidence_percentage;
+            }
+            if (prediction.probability !== undefined) {
+                return `${(prediction.probability * 100).toFixed(1)}%`;
+            }
+            if (prediction.confidence !== undefined) {
+                return `${(prediction.confidence * 100).toFixed(1)}%`;
+            }
+            return 'N/A';
+        }
+
+        function formatPrecautions(value) {
+            if (!value) return 'Not available';
+            if (Array.isArray(value)) {
+                return value.length ? value.join(', ') : 'Not available';
+            }
+            return value;
+        }
+
+        function submitSymptoms() {
+            const text = document.getElementById('symptomInput').value.trim();
+            if (!text) {
+                showMessage('Please describe your symptoms before submitting.', 'error');
+                return;
+            }
+
+            clearMessage();
+            showLoading(true);
+            document.getElementById('results').style.display = 'none';
+
+            fetch('/search_predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            })
+            .then(async response => {
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    const errorText = data.error || 'Unable to analyze symptoms. Please try again.';
+                    showMessage(errorText, 'error');
+                    return;
+                }
+
+                renderResults(data);
+            })
+            .catch(error => {
+                showMessage('Network error: ' + error.message, 'error');
+            })
+            .finally(() => showLoading(false));
+        }
+
+        function renderResults(data) {
+            const results = document.getElementById('results');
+            const predictions = normalizePredictions(data);
+            const detectedSymptoms = data.detected_symptoms || data.validated_symptoms || [];
+            const topPrediction = predictions.length ? predictions[0] : null;
+
+            let html = '';
+            html += `<h2>Results</h2>`;
+
+            if (detectedSymptoms.length) {
+                html += `<div class="section-title">Detected Symptoms</div>`;
+                html += `<div class="tag-list">${detectedSymptoms.map(symptom => `<span class="tag">${symptom}</span>`).join('')}</div>`;
+            }
+
+            if (topPrediction) {
+                html += `<div class="section-title">Top Prediction</div>`;
+                html += `<div class="result-card">`;
+                html += `<h3>${topPrediction.disease || data.predicted_disease || 'Unknown'}</h3>`;
+                html += `<p><strong>Confidence:</strong> ${formatConfidence(topPrediction)}</p>`;
+                html += `<p><strong>Specialist:</strong> ${topPrediction.specialist || 'Not available'}</p>`;
+                html += `<p><strong>Urgency:</strong> ${topPrediction.urgency || 'Not available'}</p>`;
+                html += `<p><strong>Precautions:</strong> ${formatPrecautions(topPrediction.precautions)}</p>`;
+                html += `</div>`;
+            }
+
+            html += `<div class="section-title">Suggestions & Advice</div>`;
+            if (predictions.length) {
+                predictions.forEach((pred, index) => {
+                    html += `<div class="result-card">`;
+                    html += `<h3>${index + 1}. ${pred.disease || 'Unknown'}</h3>`;
+                    html += `<p><strong>Confidence:</strong> ${formatConfidence(pred)}</p>`;
+                    html += `<p><strong>Specialist:</strong> ${pred.specialist || 'Not available'}</p>`;
+                    html += `<p><strong>Urgency:</strong> ${pred.urgency || 'Not available'}</p>`;
+                    html += `<p><strong>Precautions:</strong> ${formatPrecautions(pred.precautions)}</p>`;
+                    html += `</div>`;
+                });
+            } else {
+                html += `<div class="result-card"><p>No suggestions or advice are available for this input.</p></div>`;
+            }
+
+            results.innerHTML = html;
+            results.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
