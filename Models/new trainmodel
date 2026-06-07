@@ -1,0 +1,212 @@
+import pandas as pd
+import numpy as np
+
+# ============================================
+# COMPLETE SYMPTOM-DISEASE DATASET
+# ============================================
+
+disease_symptoms = {
+    # Respiratory System
+    'Common Cold': ['continuous_sneezing', 'chills', 'fatigue', 'cough', 'headache', 'runny_nose', 'sore_throat', 'congestion', 'mild_fever'],
+    'Influenza': ['high_fever', 'chills', 'fatigue', 'cough', 'headache', 'muscle_pain', 'sore_throat', 'runny_nose', 'sweating'],
+    'COVID-19': ['high_fever', 'dry_cough', 'fatigue', 'loss_of_taste', 'loss_of_smell', 'breathlessness', 'headache', 'sore_throat', 'muscle_pain'],
+    'Pneumonia': ['high_fever', 'cough_with_phlegm', 'breathlessness', 'chest_pain', 'chills', 'fatigue', 'sweating', 'fast_heart_rate', 'rusty_sputum'],
+    'Bronchitis': ['cough', 'mucoid_sputum', 'breathlessness', 'chest_discomfort', 'fatigue', 'mild_fever', 'wheezing'],
+    'Tuberculosis': ['chronic_cough', 'blood_in_sputum', 'night_sweats', 'weight_loss', 'fatigue', 'high_fever', 'chest_pain', 'loss_of_appetite'],
+    'Asthma': ['wheezing', 'breathlessness', 'chest_tightness', 'cough', 'shortness_of_breath', 'family_history'],
+    'Bronchiectasis': ['chronic_cough', 'foul_sputum', 'breathlessness', 'fatigue', 'recurring_infections', 'clubbed_fingers'],
+    'Pleurisy': ['sharp_chest_pain', 'pain_on_breathing', 'shortness_of_breath', 'cough', 'fever'],
+    'Pulmonary Embolism': ['sudden_breathlessness', 'chest_pain', 'coughing_blood', 'fast_heart_rate', 'dizziness', 'sweating'],
+    
+    # Cardiovascular System
+    'Hypertension': ['headache', 'dizziness', 'blurred_vision', 'chest_pain', 'shortness_of_breath', 'nosebleed', 'fatigue'],
+    'Heart Attack': ['chest_pain', 'pain_in_left_arm', 'shortness_of_breath', 'sweating', 'nausea', 'dizziness', 'jaw_pain', 'fatigue'],
+    'Heart Failure': ['shortness_of_breath', 'swollen_ankles', 'fatigue', 'rapid_heartbeat', 'persistent_cough', 'swollen_abdomen'],
+    'Arrhythmia': ['palpitations', 'dizziness', 'chest_fluttering', 'shortness_of_breath', 'fatigue', 'fainting'],
+    'Angina': ['chest_pain', 'chest_pressure', 'pain_in_shoulder', 'pain_in_neck', 'pain_in_jaw', 'shortness_of_breath', 'fatigue'],
+    'Cardiomyopathy': ['breathlessness', 'swollen_legs', 'fatigue', 'irregular_heartbeat', 'dizziness', 'fainting'],
+    'Pericarditis': ['sharp_chest_pain', 'pain_when_lying_down', 'fever', 'fatigue', 'heart_palpitations'],
+    'Endocarditis': ['fever', 'chills', 'night_sweats', 'fatigue', 'muscle_pain', 'shortness_of_breath', 'swollen_feet'],
+    
+    # Digestive System
+    'GERD': ['heartburn', 'acid_reflux', 'chest_pain', 'difficulty_swallowing', 'regurgitation', 'chronic_cough', 'sore_throat'],
+    'Gastritis': ['stomach_pain', 'nausea', 'bloating', 'loss_of_appetite', 'vomiting', 'indigestion'],
+    'Peptic Ulcer': ['burning_stomach_pain', 'bloating', 'heartburn', 'nausea', 'dark_stool', 'weight_loss'],
+    'Gastroenteritis': ['diarrhea', 'vomiting', 'nausea', 'stomach_cramps', 'low_grade_fever', 'dehydration'],
+    'IBS': ['abdominal_pain', 'bloating', 'diarrhea', 'constipation', 'mucus_in_stool', 'fatigue'],
+    'Crohns Disease': ['chronic_diarrhea', 'abdominal_pain', 'weight_loss', 'fatigue', 'blood_in_stool', 'mouth_sores'],
+    'Ulcerative Colitis': ['bloody_diarrhea', 'abdominal_pain', 'rectal_pain', 'weight_loss', 'fatigue', 'urgency_to_defecate'],
+    'Appendicitis': ['lower_right_abdominal_pain', 'nausea', 'vomiting', 'loss_of_appetite', 'fever', 'abdominal_swelling'],
+    'Gallstones': ['upper_right_abdominal_pain', 'nausea', 'vomiting', 'pain_after_meals', 'fever', 'jaundice'],
+    'Pancreatitis': ['upper_abdominal_pain', 'pain_radiating_to_back', 'nausea', 'vomiting', 'fever', 'rapid_pulse'],
+    'Hepatitis A': ['fatigue', 'nausea', 'abdominal_pain', 'loss_of_appetite', 'low_grade_fever', 'yellowish_skin', 'dark_urine'],
+    'Hepatitis B': ['fatigue', 'nausea', 'abdominal_pain', 'dark_urine', 'joint_pain', 'yellowish_skin', 'loss_of_appetite'],
+    'Hepatitis C': ['fatigue', 'nausea', 'loss_of_appetite', 'muscle_pain', 'yellowish_skin', 'dark_urine'],
+    'Cirrhosis': ['fatigue', 'weight_loss', 'nausea', 'swollen_legs', 'yellowish_skin', 'abdominal_swelling', 'easy_bruising'],
+    'Fatty Liver': ['fatigue', 'upper_abdominal_discomfort', 'weight_loss', 'enlarged_liver'],
+    
+    # Neurological System
+    'Migraine': ['throbbing_headache', 'nausea', 'vomiting', 'light_sensitivity', 'sound_sensitivity', 'visual_aura', 'blurred_vision'],
+    'Tension Headache': ['dull_headache', 'pressure_around_forehead', 'tightness_in_neck', 'scalp_tenderness'],
+    'Cluster Headache': ['severe_headache_around_eye', 'red_eye', 'runny_nose', 'eyelid_drooping', 'restlessness'],
+    'Stroke': ['sudden_numbness', 'confusion', 'difficulty_speaking', 'vision_problems', 'loss_of_balance', 'severe_headache'],
+    'Epilepsy': ['seizures', 'loss_of_consciousness', 'staring_spells', 'muscle_stiffening', 'confusion', 'uncontrollable_jerking'],
+    'Multiple Sclerosis': ['numbness', 'vision_loss', 'fatigue', 'muscle_weakness', 'balance_problems', 'bladder_dysfunction'],
+    'Parkinsons Disease': ['tremors', 'slow_movement', 'muscle_stiffness', 'balance_problems', 'loss_of_smell', 'soft_speech'],
+    'Alzheimers Disease': ['memory_loss', 'confusion', 'difficulty_planning', 'personality_changes', 'language_problems'],
+    'Meningitis': ['severe_headache', 'stiff_neck', 'high_fever', 'nausea', 'vomiting', 'light_sensitivity', 'confusion'],
+    'Encephalitis': ['fever', 'headache', 'confusion', 'seizures', 'sensitivity_to_light', 'speech_problems'],
+    
+    # Musculoskeletal System
+    'Osteoarthritis': ['joint_pain', 'joint_stiffness', 'swelling_joints', 'reduced_mobility', 'grating_sensation', 'bone_spurs'],
+    'Rheumatoid Arthritis': ['joint_pain', 'morning_stiffness', 'swollen_joints', 'fatigue', 'fever', 'rheumatoid_nodules'],
+    'Gout': ['sudden_severe_joint_pain', 'red_joint', 'swollen_joint', 'warm_to_touch', 'tophi', 'limited_movement'],
+    'Osteoporosis': ['back_pain', 'loss_of_height', 'stooped_posture', 'fragile_bones', 'bone_fractures'],
+    'Fibromyalgia': ['widespread_muscle_pain', 'fatigue', 'sleep_disturbances', 'memory_issues', 'mood_issues', 'headaches'],
+    'Carpal Tunnel': ['hand_numbness', 'tingling_fingers', 'wrist_pain', 'hand_weakness', 'dropping_objects'],
+    'Sciatica': ['lower_back_pain', 'pain_radiating_to_leg', 'numbness_in_leg', 'tingling_feet', 'muscle_weakness'],
+    'Cervical Spondylosis': ['neck_pain', 'shoulder_pain', 'headache', 'arm_numbness', 'muscle_weakness', 'loss_of_balance'],
+    
+    # Endocrine System
+    'Diabetes Type 1': ['excessive_thirst', 'frequent_urination', 'weight_loss', 'fatigue', 'blurred_vision', 'slow_healing', 'hunger'],
+    'Diabetes Type 2': ['increased_thirst', 'frequent_urination', 'fatigue', 'blurred_vision', 'numbness_in_feet', 'slow_healing', 'frequent_infections'],
+    'Hypothyroidism': ['fatigue', 'weight_gain', 'cold_intolerance', 'dry_skin', 'hair_loss', 'depression', 'slow_heartbeat'],
+    'Hyperthyroidism': ['weight_loss', 'rapid_heartbeat', 'heat_intolerance', 'nervousness', 'tremors', 'fatigue', 'frequent_bowel_movements'],
+    'Hypoglycemia': ['sweating', 'shaking', 'hunger', 'dizziness', 'confusion', 'irritability', 'fast_heartbeat', 'blurred_vision'],
+    
+    # Skin Conditions
+    'Eczema': ['itchy_skin', 'dry_scaly_patches', 'red_inflamed_skin', 'cracked_skin', 'oozing_blisters', 'thickened_skin'],
+    'Psoriasis': ['red_patches', 'silvery_scales', 'itchy_burning_skin', 'dry_cracked_skin', 'thickened_nails', 'joint_pain'],
+    'Acne': ['pimples', 'blackheads', 'whiteheads', 'cysts', 'red_inflamed_skin', 'scarring'],
+    'Rosacea': ['facial_redness', 'visible_blood_vessels', 'swollen_red_bumps', 'burning_sensation', 'eye_irritation'],
+    'Shingles': ['painful_rash', 'burning_sensation', 'blisters', 'itching', 'fever', 'headache', 'sensitivity_to_light'],
+    'Fungal Infection': ['itching', 'skin_rash', 'ring_shaped_patches', 'cracked_skin', 'scaly_skin', 'nail_discoloration'],
+    
+    # Urinary System
+    'UTI': ['burning_urination', 'frequent_urination', 'cloudy_urine', 'strong_smell_urine', 'pelvic_pain', 'blood_in_urine'],
+    'Kidney Stones': ['severe_side_pain', 'pain_radiating_to_groin', 'painful_urination', 'pink_urine', 'nausea', 'fever'],
+    'Kidney Infection': ['fever', 'chills', 'back_side_pain', 'frequent_urination', 'burning_urination', 'nausea', 'vomiting'],
+    
+    # Mental Health
+    'Depression': ['persistent_sadness', 'loss_of_interest', 'fatigue', 'sleep_disturbances', 'appetite_changes', 'worthlessness', 'difficulty_concentrating'],
+    'Anxiety Disorder': ['excessive_worry', 'restlessness', 'fatigue', 'difficulty_concentrating', 'irritability', 'muscle_tension', 'sleep_problems'],
+    'Panic Disorder': ['sudden_panic_attacks', 'palpitations', 'sweating', 'trembling', 'shortness_of_breath', 'fear_of_dying'],
+    'Bipolar Disorder': ['mood_swings', 'manic_episodes', 'depressive_episodes', 'increased_energy', 'decreased_sleep', 'impulsive_behavior'],
+    
+    # Blood Disorders
+    'Anemia': ['fatigue', 'weakness', 'pale_skin', 'shortness_of_breath', 'dizziness', 'cold_hands_feet', 'irregular_heartbeat'],
+    'Leukemia': ['fatigue', 'fever', 'easy_bruising', 'frequent_infections', 'unexplained_weight_loss', 'bone_pain'],
+    'Sickle Cell Anemia': ['fatigue', 'painful_swelling_hands_feet', 'jaundice', 'frequent_infections', 'vision_problems'],
+    
+    # Autoimmune Diseases
+    'Lupus': ['fatigue', 'joint_pain', 'butterfly_rash', 'sun_sensitivity', 'fever', 'mouth_sores', 'chest_pain'],
+    'Sjogrens Syndrome': ['dry_eyes', 'dry_mouth', 'joint_pain', 'fatigue', 'dry_skin', 'vaginal_dryness'],
+    'Scleroderma': ['thickening_skin', 'raynauds_phenomenon', 'joint_pain', 'digestive_problems', 'shortness_of_breath'],
+    
+    # Infectious Diseases
+    'Malaria': ['high_fever', 'chills', 'sweating', 'headache', 'muscle_pain', 'nausea', 'vomiting', 'fatigue'],
+    'Dengue': ['high_fever', 'severe_headache', 'pain_behind_eyes', 'joint_pain', 'muscle_pain', 'rash', 'bleeding'],
+    'Typhoid': ['prolonged_fever', 'headache', 'abdominal_pain', 'constipation', 'loss_of_appetite', 'rash'],
+    'HIV/AIDS': ['fever', 'fatigue', 'weight_loss', 'night_sweats', 'swollen_lymph_nodes', 'opportunistic_infections'],
+    'Chickenpox': ['fever', 'itchy_blisters', 'fatigue', 'loss_of_appetite', 'headache'],
+    'Measles': ['high_fever', 'cough', 'runny_nose', 'red_eyes', 'koplik_spots', 'rash'],
+    
+    # Ear, Nose, Throat
+    'Sinusitis': ['facial_pain', 'nasal_congestion', 'headache', 'purulent_nasal_discharge', 'cough', 'fever', 'bad_breath'],
+    'Pharyngitis': ['sore_throat', 'painful_swallowing', 'red_throat', 'swollen_tonsils', 'fever', 'headache'],
+    'Otitis Media': ['ear_pain', 'fever', 'irritability', 'difficulty_hearing', 'fluid_drainage', 'loss_of_appetite'],
+    'Meniere Disease': ['vertigo_episodes', 'tinnitus', 'hearing_loss', 'ear_fullness', 'nausea', 'vomiting'],
+    
+    # Eye Conditions
+    'Conjunctivitis': ['red_eye', 'itchy_eye', 'watering_eye', 'eye_discharge', 'swollen_eyelid', 'light_sensitivity'],
+    'Glaucoma': ['vision_loss', 'severe_eye_pain', 'nausea', 'vomiting', 'halos_around_lights', 'red_eye'],
+    'Cataracts': ['cloudy_vision', 'difficulty_night_vision', 'light_sensitivity', 'fading_colors', 'double_vision'],
+    
+    # Sleep Disorders
+    'Insomnia': ['difficulty_falling_asleep', 'difficulty_staying_asleep', 'waking_early', 'daytime_fatigue', 'irritability'],
+    'Sleep Apnea': ['loud_snoring', 'gasping_during_sleep', 'morning_headache', 'excessive_daytime_sleepiness', 'dry_mouth'],
+    
+    # Nutritional Deficiencies
+    'Vitamin D Deficiency': ['bone_pain', 'muscle_weakness', 'fatigue', 'depression', 'frequent_infections'],
+    'Vitamin B12 Deficiency': ['fatigue', 'pale_skin', 'numbness_tingling', 'balance_problems', 'memory_issues'],
+    'Iron Deficiency': ['fatigue', 'pale_skin', 'cold_hands_feet', 'brittle_nails', 'headache', 'dizziness'],
+    
+    # Pregnancy Related
+    'Preeclampsia': ['high_blood_pressure', 'protein_in_urine', 'swelling', 'headache', 'vision_changes', 'upper_abdominal_pain'],
+    'Gestational Diabetes': ['increased_thirst', 'frequent_urination', 'fatigue', 'blurred_vision'],
+    
+    # Pediatric Conditions
+    'Kawasaki Disease': ['prolonged_fever', 'red_eyes', 'strawberry_tongue', 'rash', 'swollen_lymph_nodes', 'irritability'],
+    'Hand Foot Mouth': ['fever', 'mouth_sores', 'rash_on_hands_feet', 'sore_throat', 'loss_of_appetite'],
+}
+
+# Generate dataset
+def generate_dataset(disease_symptoms_map, max_symptoms_per_row=15):
+    records = []
+    
+    for disease, symptoms in disease_symptoms_map.items():
+        # Add the full symptom set
+        row = {'Disease': disease}
+        for i in range(max_symptoms_per_row):
+            col_name = f'Symptom_{i+1}'
+            row[col_name] = symptoms[i] if i < len(symptoms) else ''
+        records.append(row)
+        
+        # Add variations (random subsets)
+        import random
+        num_variations = min(5, len(symptoms))
+        for variation in range(num_variations):
+            row = {'Disease': disease}
+            num_symptoms = random.randint(max(3, len(symptoms)-5), len(symptoms))
+            varied_symptoms = random.sample(symptoms, min(num_symptoms, len(symptoms)))
+            for i in range(max_symptoms_per_row):
+                col_name = f'Symptom_{i+1}'
+                row[col_name] = varied_symptoms[i] if i < len(varied_symptoms) else ''
+            records.append(row)
+    
+    return pd.DataFrame(records)
+
+# Create DataFrames
+print("Generating dataset...")
+df = generate_dataset(disease_symptoms, max_symptoms_per_row=15)
+
+# Save to CSV
+df.to_csv('symptom_disease_dataset.csv', index=False)
+print(f"✅ Saved: symptom_disease_dataset.csv")
+print(f"   Total rows: {len(df)}")
+print(f"   Total diseases: {len(disease_symptoms)}")
+
+# Create symptoms list
+all_symptoms = set()
+for symptoms in disease_symptoms.values():
+    all_symptoms.update(symptoms)
+
+symptoms_df = pd.DataFrame(sorted(all_symptoms), columns=['Symptom'])
+symptoms_df.to_csv('all_symptoms.csv', index=False)
+print(f"✅ Saved: all_symptoms.csv")
+print(f"   Total unique symptoms: {len(all_symptoms)}")
+
+# Create binary matrix
+print("\nCreating binary matrix...")
+symptom_cols = [f'Symptom_{i}' for i in range(1, 16)]
+binary_records = []
+
+for idx, row in df.iterrows():
+    record = {'Disease': row['Disease']}
+    for symptom in sorted(all_symptoms):
+        present = symptom in [row[col] for col in symptom_cols if row[col]]
+        record[symptom] = 1 if present else 0
+    binary_records.append(record)
+
+binary_df = pd.DataFrame(binary_records)
+binary_df.to_csv('symptom_disease_binary_matrix.csv', index=False)
+print(f"✅ Saved: symptom_disease_binary_matrix.csv")
+print(f"   Shape: {binary_df.shape}")
+
+print("\n" + "="*50)
+print("✅ ALL CSV FILES GENERATED SUCCESSFULLY!")
+print("="*50)
+print("\n📁 Files created:")
+print("   1. symptom_disease_dataset.csv - Main dataset with symptoms per disease")
+print("   2. all_symptoms.csv - List of all unique symptoms")
+print("   3. symptom_disease_binary_matrix.csv - Binary matrix for ML training")
