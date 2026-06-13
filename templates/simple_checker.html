@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Simple Disease Prediction</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediFlow</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -53,7 +55,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏥 Disease Prediction from Symptoms</h1>
+        <h1>MediFlow</h1>
         
         <div>
             <label>Describe your symptoms:</label>
@@ -93,7 +95,9 @@
                 console.log('Data received:', data);
                 showLoading(false);
                 
-                if (data.success) {
+                if (data.low_confidence) {
+                    displayLowConfidenceResults(data);
+                } else if (data.success) {
                     displayResults(data);
                 } else {
                     showMessage('Error: ' + (data.error || 'No results'), 'error');
@@ -104,6 +108,42 @@
                 showLoading(false);
                 showMessage('Connection error: ' + error.message, 'error');
             });
+        }
+        
+        function displayLowConfidenceResults(data) {
+            console.log('Displaying low confidence results');
+            
+            const reassurance = data.reassurance || {};
+            const nextSteps = data.next_steps || [];
+            const recommendations = reassurance.recommendations || [];
+            
+            let html = '<div style="background: #e8f7ee; padding: 15px; border-radius: 5px; border-left: 4px solid #1d6a3f; margin: 10px 0;">';
+            html += '<h3 style="margin: 0 0 10px 0; color: #1d6a3f;">✓ ' + (reassurance.title || 'Good News!') + '</h3>';
+            html += '<p style="margin: 0; color: #1d6a3f;">' + (reassurance.message || 'Based on your symptoms, it does not appear to be a serious condition.') + '</p>';
+            html += '</div>';
+            
+            if (recommendations.length > 0) {
+                html += '<div style="background: #f9f9f9; padding: 15px; border-radius: 5px; border-left: 4px solid #4CAF50; margin: 10px 0;">';
+                html += '<h3 style="margin: 0 0 10px 0;">Recommended Care:</h3>';
+                recommendations.forEach(rec => {
+                    html += '<p style="margin: 5px 0;">• ' + rec + '</p>';
+                });
+                if (reassurance.note) {
+                    html += '<p style="margin-top: 10px; font-style: italic; color: #666;"><strong>Note:</strong> ' + reassurance.note + '</p>';
+                }
+                html += '</div>';
+            }
+            
+            if (nextSteps.length > 0) {
+                html += '<div style="background: #f9f9f9; padding: 15px; border-radius: 5px; border-left: 4px solid #2196F3; margin: 10px 0;">';
+                html += '<h3 style="margin: 0 0 10px 0;">For a Better Diagnosis, Please:</h3>';
+                nextSteps.forEach((step, index) => {
+                    html += '<p style="margin: 5px 0;"><strong>' + (index + 1) + '.</strong> ' + step + '</p>';
+                });
+                html += '</div>';
+            }
+            
+            document.getElementById('results').innerHTML = html;
         }
         
         function displayResults(data) {

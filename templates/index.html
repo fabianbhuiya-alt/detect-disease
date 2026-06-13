@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Symptom Checker - Find Your Diagnosis</title>
+    <title>MediFlow</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         * {
@@ -520,7 +520,7 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🏥 Symptom Checker</h1>
+            <h1>MediFlow</h1>
             <p>Describe your symptoms and find the right specialist</p>
         </div>
         
@@ -708,17 +708,17 @@
                 return;
             }
             
-            // Filter symptoms
+            // Filter symptoms and sort alphabetically
             const matches = allSymptoms.filter(s => 
                 s.toLowerCase().includes(query.toLowerCase())
-            ).slice(0, 10);
+            ).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).slice(0, 10);
             
             if (matches.length === 0) {
                 autocompleteList.classList.remove('show');
                 return;
             }
             
-            // Display matches
+            // Display matches in alphabetical order
             autocompleteList.innerHTML = matches.map(symptom => `
                 <div class="autocomplete-item" onclick="addSymptom('${symptom}')">${symptom}</div>
             `).join('');
@@ -833,7 +833,10 @@
                 
                 const data = await response.json();
                 
-                if (data.success) {
+                if (data.low_confidence) {
+                    // Handle low confidence response
+                    displayLowConfidenceResults(data);
+                } else if (data.success) {
                     displayResults(data);
                     currentSpecialists = data.recommended_specialists;
                     currentDiseases = [data.predicted_disease];
@@ -877,7 +880,10 @@
                 
                 const data = await response.json();
                 
-                if (data.success) {
+                if (data.low_confidence) {
+                    // Handle low confidence response
+                    displayLowConfidenceResults(data);
+                } else if (data.success) {
                     // Show detected symptoms
                     displayDetectedSymptoms(data.detected_symptoms);
                     // Display results
@@ -921,56 +927,142 @@
         // ==================== COMMON FUNCTIONS ====================
         
         // Display results
+        function displayLowConfidenceResults(data) {
+            // Show low confidence message
+            document.getElementById('diseaseName').textContent = 'Analysis Complete';
+            document.getElementById('resultsPreview').style.display = 'block';
+            
+            // Clear Google Maps buttons
+            const mapButtonsContainer = document.getElementById('specialistMapButtons');
+            mapButtonsContainer.innerHTML = '';
+            
+            // Clear top predictions list
+            const topPredictionsList = document.getElementById('topPredictionsList');
+            topPredictionsList.innerHTML = '';
+            
+            // Display reassurance and recommendations
+            const suggestionsAdviceList = document.getElementById('suggestionsAdviceList');
+            const reassurance = data.reassurance || {};
+            const nextSteps = data.next_steps || [];
+            const recommendations = reassurance.recommendations || [];
+            
+            let html = `
+                <div style="background: #e8f7ee; border: 2px solid #1d6a3f; border-radius: 10px; padding: 20px; margin-bottom: 15px;">
+                    <h3 style="margin: 0 0 10px 0; color: #1d6a3f; font-size: 1.2em;">✓ ${reassurance.title || 'Good News!'}</h3>
+                    <p style="margin: 0; color: #1d6a3f; font-size: 0.95em;">${reassurance.message || 'Based on your symptoms, it does not appear to be a serious condition.'}</p>
+                </div>
+            `;
+            
+            if (recommendations.length > 0) {
+                html += `
+                    <div style="background: #f8fafc; border: 1px solid #dde6f0; border-radius: 10px; padding: 15px; margin-bottom: 15px;">
+                        <h4 style="margin: 0 0 12px 0; color: #333;">Recommended Care:</h4>
+                        <div style="font-size: 0.95em; line-height: 1.8; color: #555;">
+                `;
+                recommendations.forEach(rec => {
+                    html += `<p style="margin: 6px 0;">${rec}</p>`;
+                });
+                if (reassurance.note) {
+                    html += `<p style="margin-top: 12px; font-style: italic; color: #666;"><strong>Note:</strong> ${reassurance.note}</p>`;
+                }
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (nextSteps.length > 0) {
+                html += `
+                    <div style="background: #f8fafc; border: 1px solid #dde6f0; border-radius: 10px; padding: 15px;">
+                        <h4 style="margin: 0 0 12px 0; color: #333;">For a Better Diagnosis, Please:</h4>
+                        <div style="font-size: 0.95em; line-height: 1.8; color: #555;">
+                `;
+                nextSteps.forEach((step, index) => {
+                    html += `<p style="margin: 6px 0;"><strong>${index + 1}.</strong> ${step}</p>`;
+                });
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+            
+            suggestionsAdviceList.innerHTML = html;
+            
+            // Show full results
+            document.getElementById('fullResults').classList.add('show');
+        }
+        
+        // Display results function
         function displayResults(data) {
             // Disease name
-            document.getElementById('diseaseName').textContent = data.predicted_disease;
+            document.getElementById('diseaseName').textContent = data.predicted_disease || 'Unknown';
             
             document.getElementById('resultsPreview').style.display = 'block';
             
-            // Generate Google Maps buttons for each specialist (keep map section)
+            // Generate Google Maps buttons for each specialist from API
             const mapButtonsContainer = document.getElementById('specialistMapButtons');
-            mapButtonsContainer.innerHTML = (data.recommended_specialists || []).map(spec => `
-                <a href="https://www.google.com/maps/search/${encodeURIComponent(spec + ' hospital')}" target="_blank" class="map-link-btn">
-                    🗺️ Find ${spec}
-                </a>
-            `).join('');
-            
-            // Top predictions
-            const topPredictionsList = document.getElementById('topPredictionsList');
-            if (data.top_predictions && data.top_predictions.length > 0) {
-                topPredictionsList.innerHTML = data.top_predictions.map(pred => `
-                    <div class="prediction-item">
-                        <span class="prediction-name">${pred.disease}</span>
-                        <span class="prediction-prob">${(pred.probability * 100).toFixed(1)}%</span>
-                    </div>
+            const specialists = data.recommended_specialists || [];
+            if (specialists.length > 0) {
+                mapButtonsContainer.innerHTML = specialists.map(spec => `
+                    <a href="https://www.google.com/maps/search/${encodeURIComponent(spec + ' hospital')}" target="_blank" class="map-link-btn">
+                        🗺️ Find ${spec}
+                    </a>
                 `).join('');
+            } else {
+                mapButtonsContainer.innerHTML = '<p style="color: #999;">No specialists found</p>';
             }
             
-            // Suggestions & Advice - Only for the top/highest probability disease
-            const suggestionsAdviceList = document.getElementById('suggestionsAdviceList');
-            const suggestions = data.suggestions_and_advice || data.top_predictions || [];
+            // Top predictions (Other Possible Conditions)
+            const topPredictionsList = document.getElementById('topPredictionsList');
+            const predictions = data.top_predictions || data.predictions || [];
+            if (predictions && predictions.length > 0) {
+                topPredictionsList.innerHTML = predictions.map((pred, idx) => `
+                    <div class="prediction-item" style="background: ${idx === 0 ? '#e3f2fd' : '#f5f5f5'};">
+                        <span class="prediction-name" style="color: ${idx === 0 ? '#1976d2' : '#333'};${idx === 0 ? 'font-weight: bold;' : ''}">${pred.disease}</span>
+                        <span class="prediction-prob" style="background: ${idx === 0 ? '#1976d2' : '#667eea'};">${pred.confidence_percentage || (pred.probability ? (pred.probability * 100).toFixed(1) + '%' : 'N/A')}</span>
+                    </div>
+                `).join('');
+            } else {
+                topPredictionsList.innerHTML = '<p style="color: #999;">No predictions available</p>';
+            }
             
-            if (suggestions && suggestions.length > 0) {
-                // Only show the first (highest probability) suggestion
-                const topSuggestion = suggestions[0];
-                const confidence = topSuggestion.confidence_percentage || 
-                    (topSuggestion.probability ? `${(topSuggestion.probability * 100).toFixed(1)}%` : 'N/A');
-                const specialist = topSuggestion.specialist || 'Not available';
-                const urgency = topSuggestion.urgency || 'Not specified';
-                const precautions = Array.isArray(topSuggestion.precautions) ? 
-                    topSuggestion.precautions.join(', ') : 
-                    (topSuggestion.precautions || 'Not available');
+            // Suggestions & Advice - Main disease details
+            const suggestionsAdviceList = document.getElementById('suggestionsAdviceList');
+            const topPrediction = predictions && predictions.length > 0 ? predictions[0] : null;
+            
+            if (topPrediction) {
+                const confidence = topPrediction.confidence_percentage || 
+                    (topPrediction.confidence ? `${(topPrediction.confidence * 100).toFixed(1)}%` : 
+                    (topPrediction.probability ? `${(topPrediction.probability * 100).toFixed(1)}%` : 'N/A'));
+                const specialist = topPrediction.specialist || 'General Practitioner';
+                const urgency = topPrediction.urgency || 'Medium';
+                const precautions = Array.isArray(topPrediction.precautions) ? 
+                    topPrediction.precautions.join(' • ') : 
+                    (topPrediction.precautions || 'Consult with a healthcare professional');
+                const matchingSymptoms = Array.isArray(topPrediction.matching_symptoms) ?
+                    topPrediction.matching_symptoms.join(', ') :
+                    'N/A';
+                
+                const urgencyColor = urgency === 'High' ? '#d32f2f' : (urgency === 'Medium' ? '#f57c00' : '#388e3c');
+                const urgencyBg = urgency === 'High' ? '#ffebee' : (urgency === 'Medium' ? '#fff3e0' : '#e8f5e9');
                 
                 suggestionsAdviceList.innerHTML = `
-                    <div style="background: #f8fafc; border: 1px solid #dde6f0; border-radius: 10px; padding: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <h4 style="margin: 0 0 10px 0; color: #333; font-size: 1.05em;">${topSuggestion.disease}</h4>
-                            <span style="background: #667eea; color: white; padding: 5px 12px; border-radius: 15px; font-size: 0.85em; font-weight: 600;">${confidence}</span>
+                    <div style="background: #f8fafc; border: 1px solid #dde6f0; border-radius: 10px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+                            <h4 style="margin: 0; color: #333; font-size: 1.2em;">${topPrediction.disease}</h4>
+                            <span style="background: #667eea; color: white; padding: 8px 15px; border-radius: 15px; font-size: 0.9em; font-weight: 700;">${confidence}</span>
                         </div>
-                        <div style="font-size: 0.95em; line-height: 1.6; color: #555;">
-                            <p style="margin: 8px 0;"><strong>👨‍⚕️ Specialist:</strong> ${specialist}</p>
-                            <p style="margin: 8px 0;"><strong>⚠️ Urgency:</strong> ${urgency}</p>
-                            <p style="margin: 8px 0;"><strong>💊 Precautions:</strong> ${precautions}</p>
+                        
+                        <div style="font-size: 0.95em; line-height: 1.7; color: #555;">
+                            <p style="margin: 10px 0;"><strong>👨‍⚕️ Recommended Specialist:</strong> ${specialist}</p>
+                            <p style="margin: 10px 0; padding: 10px; background: ${urgencyBg}; border-left: 3px solid ${urgencyColor}; border-radius: 4px;">
+                                <strong>⚠️ Urgency Level:</strong> <span style="color: ${urgencyColor}; font-weight: bold;">${urgency}</span>
+                            </p>
+                            <p style="margin: 10px 0;"><strong>🩺 Matching Symptoms:</strong> ${matchingSymptoms}</p>
+                            <p style="margin: 10px 0;"><strong>💊 Recommended Precautions:</strong></p>
+                            <div style="background: #fafafa; padding: 10px 15px; border-radius: 6px; margin-top: 8px;">
+                                ${precautions.split(' • ').map(p => `<div style="margin: 5px 0;">• ${p.trim()}</div>`).join('')}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1011,3 +1103,4 @@
     </script>
 </body>
 </html>
+

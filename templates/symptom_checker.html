@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Symptom Checker</title>
+    <title>MediFlow</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -112,11 +112,11 @@
 <body>
     <div class="page">
         <div class="card">
-            <h1>Symptom Checker</h1>
+            <h1>MediFlow</h1>
             <p>Enter your symptoms in free text and get a prediction with suggestions and advice.</p>
             <textarea id="symptomInput" placeholder="Describe what you are feeling, for example: I have fever, cough, and sore throat."></textarea>
             <button id="submitBtn" onclick="submitSymptoms()">Analyze Symptoms</button>
-            <div id="loading" class="loading">⏳ Analyzing symptoms...</div>
+            <div id="loading" class="loading">â³ Analyzing symptoms...</div>
             <div id="message"></div>
         </div>
 
@@ -190,6 +190,12 @@
             .then(async response => {
                 const data = await response.json();
 
+                if (data.low_confidence) {
+                    // Handle low confidence response
+                    renderLowConfidenceResults(data);
+                    return;
+                }
+
                 if (!response.ok || !data.success) {
                     const errorText = data.error || 'Unable to analyze symptoms. Please try again.';
                     showMessage(errorText, 'error');
@@ -202,6 +208,54 @@
                 showMessage('Network error: ' + error.message, 'error');
             })
             .finally(() => showLoading(false));
+        }
+
+        function renderLowConfidenceResults(data) {
+            const results = document.getElementById('results');
+            const detectedSymptoms = data.detected_symptoms || [];
+            const reassurance = data.reassurance || {};
+            const nextSteps = data.next_steps || [];
+
+            let html = '';
+            html += `<h2>Analysis Complete</h2>`;
+
+            if (detectedSymptoms.length) {
+                html += `<div class="section-title">Detected Symptoms</div>`;
+                html += `<div class="tag-list">${detectedSymptoms.map(symptom => `<span class="tag">${symptom}</span>`).join('')}</div>`;
+            }
+
+            html += `<div class="result-card" style="background: #e8f7ee; border-color: #1d6a3f;">`;
+            html += `<h3 style="color: #1d6a3f;">âœ“ ${reassurance.title || 'Good News!'}</h3>`;
+            html += `<p style="color: #1d6a3f;">${reassurance.message || 'Based on your symptoms, it does not appear to be a serious condition.'}</p>`;
+            html += `</div>`;
+
+            if (reassurance.recommendations && reassurance.recommendations.length) {
+                html += `<div class="section-title">Recommended Care</div>`;
+                html += `<div class="result-card">`;
+                reassurance.recommendations.forEach(rec => {
+                    html += `<p>â€¢ ${rec}</p>`;
+                });
+                if (reassurance.note) {
+                    html += `<p style="margin-top: 12px; font-style: italic; color: #666;"><strong>Note:</strong> ${reassurance.note}</p>`;
+                }
+                html += `</div>`;
+            }
+
+            if (nextSteps.length) {
+                html += `<div class="section-title">For a Better Diagnosis, Please:</div>`;
+                html += `<div class="result-card">`;
+                nextSteps.forEach((step, index) => {
+                    html += `<p>${index + 1}. ${step}</p>`;
+                });
+                html += `</div>`;
+            }
+
+            if (data.disclaimer) {
+                html += `<div class="alert error" style="margin-top: 16px; font-size: 14px;">âš•ï¸ ${data.disclaimer}</div>`;
+            }
+
+            results.innerHTML = html;
+            results.style.display = 'block';
         }
 
         function renderResults(data) {
@@ -250,3 +304,4 @@
     </script>
 </body>
 </html>
+

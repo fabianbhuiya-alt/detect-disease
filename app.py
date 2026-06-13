@@ -1,3 +1,11 @@
+"""
+MediFlow Symptom Checker
+
+A comprehensive disease prediction system that analyzes patient
+symptoms and provides intelligent disease diagnosis with specialist
+recommendations and treatment guidance.
+"""
+
 import numpy as np
 import joblib
 from flask import Flask, request, jsonify, render_template
@@ -16,8 +24,9 @@ import re
 # Load environment variables from .env file
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)  # allow frontend to call API
+app = Flask(__name__, template_folder='templates', static_folder='static')
+app.config['APP_NAME'] = 'MediFlow'
+CORS(app)  # Enable CORS for API requests
 
 # Google Maps API Key - Get your own from https://console.cloud.google.com/
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', 'YOUR_API_KEY_HERE')
@@ -47,33 +56,63 @@ def fuzzy_match_symptom(text, all_symptoms, threshold=0.6):
 def extract_symptoms_from_text(text, all_symptoms, fuzzy_threshold=0.65):
     """
     Extract symptoms from natural language text using multiple strategies:
-    1. Exact substring matching
-    2. Fuzzy matching for partial matches
-    3. Common symptom variations
+    1. Exact substring matching (PRIORITY)
+    2. Multi-word phrase matching
+    3. REMOVED: Fuzzy matching (was causing too many false matches)
+    
+    Filters out unnecessary/vague words that are not actual symptoms.
+    Prioritizes precision over recall to avoid over-detection.
     """
     detected_symptoms = set()
     text_lower = text.lower()
     
     # Split text into words and phrases
-    # Remove common words
+    # Remove common words and unnecessary/vague terms
     common_words = {'i', 'have', 'have', 'a', 'an', 'the', 'and', 'or', 'is', 'am', 'are', 'was', 'were', 
                    'my', 'me', 'experiencing', 'feeling', 'having', 'getting', 'with', 'from', 'for',
-                   'but', 'very', 'really', 'quite', 'too', 'also', 'as', 'been', 'be', 'when', 'that', 'this'}
+                   'but', 'very', 'really', 'quite', 'too', 'also', 'as', 'been', 'be', 'when', 'that', 'this',
+                   'not', 'no', 'yes', 'ok', 'okay', 'good', 'bad', 'help', 'please', 'thanks', 'thank',
+                   'hello', 'hi', 'bye', 'just', 'about', 'some', 'any', 'all', 'by', 'on', 'in', 'at', 'to',
+                   'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'must',
+                   'go', 'going', 'come', 'coming', 'make', 'making', 'take', 'taking', 'give', 'giving',
+                   'think', 'thinking', 'know', 'knowing', 'see', 'seeing', 'find', 'finding', 'feel', 'felt',
+                   'get', 'got', 'put', 'look', 'want', 'need', 'like', 'love', 'hate', 'try', 'trying',
+                   'way', 'thing', 'time', 'day', 'night', 'morning', 'evening', 'week', 'month', 'year',
+                   'here', 'there', 'where', 'why', 'how', 'what', 'which', 'who', 'whom', 'whose',
+                   'help', 'doctor', 'hospital', 'clinic', 'medication', 'medicine', 'drug', 'treat', 'treatment'}
     
-    # Strategy 1: Exact substring matching (case-insensitive)
+    # Strategy 1: Exact substring matching (case-insensitive) - HIGHEST PRIORITY
     for symptom in all_symptoms:
         if symptom.lower() in text_lower:
             detected_symptoms.add(symptom)
     
-    # Strategy 2: Fuzzy matching for unmatched words
+    # Strategy 2: Extract multi-word phrases and exact match only
+    # Extract 2-4 word phrases
+    phrases_4 = re.findall(r'\b\w+\s+\w+\s+\w+\s+\w+\b', text_lower)
+    phrases_3 = re.findall(r'\b\w+\s+\w+\s+\w+\b', text_lower)
+    phrases_2 = re.findall(r'\b\w+\s+\w+\b', text_lower)
+    
+    for phrase in phrases_4 + phrases_3 + phrases_2:
+        if phrase not in common_words and phrase not in [s.lower() for s in detected_symptoms]:
+            # Try exact match only for phrases
+            for symptom in all_symptoms:
+                if symptom.lower() == phrase.lower():
+                    detected_symptoms.add(symptom)
+                    break
+    
+    # Strategy 3: Extract individual words and try exact match ONLY
+    # No substring matching or fuzzy matching to avoid false positives
     words = re.findall(r'\b\w+\b', text_lower)
-    words = [w for w in words if w not in common_words and len(w) > 2]
     
     for word in words:
-        if word not in [s.lower() for s in detected_symptoms]:
-            matches = fuzzy_match_symptom(word, all_symptoms, threshold=fuzzy_threshold)
-            if matches and matches[0][1] >= fuzzy_threshold:
-                detected_symptoms.add(matches[0][0])
+        if word not in common_words and len(word) > 2 and word not in [s.lower() for s in detected_symptoms]:
+            # Try exact match only
+            for symptom in all_symptoms:
+                if symptom.lower() == word:
+                    detected_symptoms.add(symptom)
+                    break
+    
+    # REMOVED: Substring matching and fuzzy matching (caused too many false matches)
     
     return list(detected_symptoms)
 
@@ -112,16 +151,33 @@ def _load_csv_manual(path):
     return diseases, sorted(list(symptoms_set))
 
 csv_detector = None
-csv_path = 'disease-symptoms-precautions-specialist.csv'
+csv_path = 'Data/combined_diseases.csv'  # Use combined dataset with all 762 diseases
+
+print("\n" + "="*70)
+print("STARTING DISEASE DETECTION SYSTEM")
+print("="*70)
+
+# PRIORITY: Initialize CSV detector FIRST (has 762 diseases + 1,874 symptoms)
 if initialize_detector:
     try:
         csv_detector = initialize_detector(csv_path)
-    except Exception:
+        if csv_detector and hasattr(csv_detector, 'disease_data'):
+            diseases_count = len(csv_detector.disease_data)
+            symptoms_count = len(csv_detector.all_symptoms)
+            print("CSV DATABASE LOADED (Primary Detection)")
+            print(f"  Path: {csv_path}")
+            print(f"  Total diseases: {diseases_count}")
+            print(f"  Total symptoms: {symptoms_count}")
+    except Exception as e:
+        print(f"CSV Detector error: {e}")
         csv_detector = None
 
 if csv_detector is None:
+    print("CSV Detector unavailable, will use fallback")
+
+if csv_detector is None:
     # build a lightweight fallback detector
-    print('WARNING: Using lightweight CSV fallback detector (pandas/imports unavailable)')
+    print('Using lightweight CSV fallback detector (pandas/imports unavailable)')
     class CSVDetectorFallback:
         def __init__(self, path):
             self.path = path
@@ -216,9 +272,7 @@ try:
                 all_symptoms = []
     
     print("Model loaded successfully!")
-    print("  Source: ORIGINAL MODEL (100 diseases)")
-    print(f"Available symptoms: {len(all_symptoms)}")
-    print(f"Available diseases: {len(le.classes_)}")
+    # Note: Using CSV dataset as primary, ML model available as fallback
     
     # Check Google Maps API Key
     if GOOGLE_MAPS_API_KEY == 'YOUR_API_KEY_HERE':
@@ -227,10 +281,30 @@ try:
         print("   See GOOGLE_MAPS_SETUP.md for instructions")
     else:
         print(f"Google Maps API Key configured: {GOOGLE_MAPS_API_KEY[:10]}...")
+    
+    # Show CSV detector stats (PREFERRED)
+    if csv_detector:
+        print("PRIMARY DETECTION: CSV Database")
+        csv_diseases = len(csv_detector.disease_data) if hasattr(csv_detector, 'disease_data') else len(csv_detector.get_all_diseases_list())
+        csv_symptoms = len(csv_detector.all_symptoms) if hasattr(csv_detector, 'all_symptoms') else len(csv_detector.get_all_symptoms_list())
+        print(f"  Available diseases: {csv_diseases}")
+        print(f"  Available symptoms: {csv_symptoms}")
+        print(f"  ML Model: Available as fallback")
+    
+    print("="*60 + "\n")
 except Exception as e:
     print(f"ERROR: Error loading models: {e}")
     print("Please run the preprocessing and training notebooks first!")
     print("INFO: Using CSV-based detection instead (API endpoints available)")
+    
+    # Show CSV detector stats
+    if csv_detector:
+        print("DETECTION: CSV Database")
+        csv_diseases = len(csv_detector.disease_data) if hasattr(csv_detector, 'disease_data') else len(csv_detector.get_all_diseases_list())
+        csv_symptoms = len(csv_detector.all_symptoms) if hasattr(csv_detector, 'all_symptoms') else len(csv_detector.get_all_symptoms_list())
+        print(f"  Available diseases: {csv_diseases}")
+        print(f"  Available symptoms: {csv_symptoms}")
+    print("="*60 + "\n")
 
 @app.route('/')
 def home():
@@ -241,14 +315,9 @@ def symptom_checker():
     """Free-text symptom checker interface"""
     return render_template('symptom_checker.html')
 
-@app.route('/test_prediction')
-def test_prediction():
-    """Test page to debug API responses"""
-    return render_template('test_prediction.html')
-
 @app.route('/simple_checker')
 def simple_checker():
-    """Simple symptom checker - working version"""
+    """Simple symptom checker interface"""
     return render_template('simple_checker.html')
 
 @app.route('/api/symptoms', methods=['GET'])
@@ -340,6 +409,25 @@ def predict():
                     'validated_symptoms': validated_symptoms
                 }), 400
             
+            # Extract specialists - prioritize top prediction's specialist first
+            specialists_list = []
+            
+            # Add specialist from top prediction first
+            if predictions:
+                top_specialist = predictions[0].get('specialist', 'General Practitioner')
+                if top_specialist and top_specialist != 'nan':
+                    specialists_list.append(top_specialist)
+            
+            # Add other unique specialists from remaining predictions
+            for pred in predictions[1:]:
+                specialist = pred.get('specialist', 'General Practitioner')
+                if specialist and specialist != 'nan' and specialist not in specialists_list:
+                    specialists_list.append(specialist)
+                    if len(specialists_list) >= 2:  # Max 2 specialists
+                        break
+            
+            recommended_specialists = specialists_list[:2]
+            
             return jsonify({
                 'success': True,
                 'source': 'CSV Dataset (ML model not available)',
@@ -348,7 +436,7 @@ def predict():
                 'predictions': predictions,
                 'predicted_disease': predictions[0]['disease'] if predictions else None,
                 'confidence': predictions[0]['confidence'] if predictions else 0,
-                'recommended_specialists': predictions[0]['specialist'] if predictions else None,
+                'recommended_specialists': recommended_specialists,
                 'top_predictions': predictions,
                 'disclaimer': 'This is for informational purposes only. Always consult with a healthcare professional.'
             })
@@ -435,6 +523,40 @@ def predict():
         # Count symptoms
         symptom_count = sum(symptoms_input.values() if isinstance(symptoms_input, dict) else [1 for _ in symptoms_input])
         
+        # Check confidence threshold (20%)
+        confidence_threshold = 0.20
+        if confidence < confidence_threshold:
+            # Low confidence - ask for more symptoms and reassure user
+            response = {
+                'success': False,
+                'low_confidence': True,
+                'confidence': confidence,
+                'confidence_percentage': f"{confidence*100:.2f}%",
+                'symptoms_reported': symptom_count,
+                'total_symptoms_available': len(all_symptoms),
+                'message': 'Cannot confidently determine a disease based on the provided symptoms.',
+                'suggestion': 'Please select more symptoms for a more accurate diagnosis.',
+                'reassurance': {
+                    'title': 'Good News!',
+                    'message': 'Based on the limited symptoms provided, it does not appear to be a serious condition.',
+                    'recommendations': [
+                        '✓ Take adequate rest and sleep',
+                        '✓ Stay hydrated - drink plenty of water',
+                        '✓ Maintain good hygiene',
+                        '✓ Eat nutritious food',
+                        '✓ Monitor your symptoms for any changes'
+                    ],
+                    'note': 'If symptoms persist or worsen, please consult with a healthcare professional.'
+                },
+                'next_steps': [
+                    'Select more symptoms from the list',
+                    'Include related symptoms you might be experiencing',
+                    'Check for secondary symptoms (fever, swelling, rash, etc.)'
+                ],
+                'disclaimer': 'This is for informational purposes only. Always consult with a healthcare professional for diagnosis and treatment.'
+            }
+            return jsonify(response)
+        
         response = {
             'success': True,
             'predicted_disease': disease,
@@ -444,7 +566,8 @@ def predict():
             'top_predictions': top_predictions,
             'suggestions_and_advice': top_predictions,
             'symptoms_reported': symptom_count,
-            'total_symptoms_available': len(all_symptoms)
+            'total_symptoms_available': len(all_symptoms),
+            'disclaimer': 'This is for informational purposes only. Always consult with a healthcare professional for diagnosis and treatment.'
         }
         
         return jsonify(response)
@@ -460,12 +583,12 @@ def predict():
 def search_predict():
     """
     Predict disease from free-text symptom description using intelligent symptom extraction.
-    Uses ML model if available, otherwise uses CSV dataset automatically.
+    ALWAYS uses CSV dataset for maximum symptom coverage (1,874 symptoms vs 321 in ML model).
     
     Expected JSON:
     {
         "text": "I have chest pain and shortness of breath",
-        "fuzzy_threshold": 0.65  (optional, default 0.65)
+        "fuzzy_threshold": 0.55  (optional, default 0.55 for better detection)
     }
     """
     try:
@@ -474,191 +597,88 @@ def search_predict():
             return jsonify({'error': 'No text provided'}), 400
         
         text = data['text'].strip()
-        fuzzy_threshold = data.get('fuzzy_threshold', 0.65)
+        fuzzy_threshold = data.get('fuzzy_threshold', 0.55)  # Lower threshold for better detection
         
         if not text:
             return jsonify({'error': 'Text input is empty'}), 400
         
-        # If ML model not loaded, use CSV detector instead
-        if model is None or scaler is None or not all_symptoms:
-            # Use CSV-based detection
-            symptom_words = text.lower().split()
-            validated_symptoms = csv_detector.extract_symptoms(symptom_words, fuzzy_threshold=fuzzy_threshold)
-            
-            if not validated_symptoms:
-                return jsonify({
-                    'success': False,
-                    'error': 'No recognized symptoms found in your description',
-                    'input_text': text,
-                    'tips': [
-                        'Try describing specific symptoms (e.g., "I have a headache")',
-                        'Use common symptom names (fever, cough, pain, etc.)',
-                        'Be more descriptive about your feelings'
-                    ]
-                }), 400
-            
-            predictions = csv_detector.predict_diseases(validated_symptoms, top_n=5)
-            
-            if not predictions:
-                return jsonify({
-                    'success': False,
-                    'error': 'No diseases matched the provided symptoms',
-                    'validated_symptoms': validated_symptoms
-                }), 400
-            
-            return jsonify({
-                'success': True,
-                'source': 'CSV Dataset (ML model not available)',
-                'input_text': text,
-                'detected_symptoms': validated_symptoms,
-                'symptoms_count': len(validated_symptoms),
-                'predictions': predictions,
-                'suggestions_and_advice': predictions,
-                'top_disease': predictions[0] if predictions else None,
-                'disclaimer': 'This is for informational purposes only. Always consult with a healthcare professional for diagnosis and treatment.'
-            })
+        # ✓ ALWAYS USE CSV DETECTOR FOR FREE-TEXT INPUT
+        # CSV detector has 1,874 symptoms vs ML model's 321
+        validated_symptoms = csv_detector.extract_symptoms_from_text(text, fuzzy_threshold=fuzzy_threshold)
         
-        # Otherwise use ML model
-        # Extract symptoms using fuzzy matching
-        matched_symptoms = extract_symptoms_from_text(text, all_symptoms, fuzzy_threshold)
-
-        # If initial extraction failed, try multiple fallback strategies:
-        if not matched_symptoms:
-            # 1) Try CSV-based extractor (may handle more variations)
-            try:
-                csv_validated = csv_detector.extract_symptoms(text.lower().split(), fuzzy_threshold=fuzzy_threshold)
-                if csv_validated:
-                    matched_symptoms = csv_validated
-            except Exception:
-                pass
-
-        if not matched_symptoms and all_symptoms:
-            # 2) N-gram fuzzy matching across known symptoms with lower thresholds
-            text_lower = text.lower()
-            words = re.findall(r"\b\w+\b", text_lower)
-            ngrams = []
-            for n in range(1, 4):
-                for i in range(len(words) - n + 1):
-                    ngrams.append(' '.join(words[i:i+n]))
-
-            alt_matches = set()
-            # try moderate threshold first
-            for ngram in ngrams:
-                matches = fuzzy_match_symptom(ngram, all_symptoms, threshold=0.6)
-                if matches and matches[0][1] >= 0.6:
-                    alt_matches.add(matches[0][0])
-
-            # then try a lower threshold
-            if not alt_matches:
-                for ngram in ngrams:
-                    matches = fuzzy_match_symptom(ngram, all_symptoms, threshold=0.5)
-                    if matches and matches[0][1] >= 0.5:
-                        alt_matches.add(matches[0][0])
-
-            if alt_matches:
-                matched_symptoms = list(alt_matches)
-
-        # If still no matches, provide helpful suggestions rather than a generic error
-        if not matched_symptoms:
-            # Suggest possible symptom keywords from our known list that roughly match words in the input
-            text_lower = text.lower()
-            words = re.findall(r"\b\w+\b", text_lower)
-            possible = [s for s in all_symptoms if any(w in s.lower() for w in words)] if all_symptoms else []
-            possible = possible[:10]
-
+        if not validated_symptoms:
             return jsonify({
                 'success': False,
-                'error': 'No known symptoms found in your description. Try describing your symptoms more clearly.',
+                'error': 'No recognized symptoms found in your description',
                 'input_text': text,
-                'suggestions': possible,
                 'tips': [
                     'Try describing specific symptoms (e.g., "I have a headache")',
                     'Use common symptom names (fever, cough, pain, etc.)',
-                    'Be more descriptive about duration, severity, and location of symptoms'
+                    'Be more descriptive about your feelings'
                 ]
             }), 400
         
-        # Build feature vector
-        feature_vector = [1 if symptom in matched_symptoms else 0 for symptom in all_symptoms]
-        X = np.array([feature_vector], dtype=float)
-        X_scaled = scaler.transform(X)
+        predictions = csv_detector.predict_diseases(validated_symptoms, top_n=5)
         
-        # Predict disease
-        pred_class = model.predict(X_scaled)[0]
+        if not predictions:
+            return jsonify({
+                'success': False,
+                'error': 'No diseases matched the provided symptoms',
+                'validated_symptoms': validated_symptoms
+            }), 400
         
-        # Handle both new models (direct string output) and old models (encoded output)
-        if le is not None:
-            disease = le.inverse_transform([pred_class])[0]
-        else:
-            disease = pred_class  # New models output disease name directly
+        # Extract specialists - prioritize top prediction's specialist first
+        specialists_list = []
         
-        confidence = 0.0
-        top_predictions = []
-        if hasattr(model, 'predict_proba'):
-            probs = model.predict_proba(X_scaled)[0]
-            
-            # Handle confidence based on model labels, which may not be contiguous indices
-            if le is not None:
-                class_indices = np.where(model.classes_ == pred_class)[0]
-                if class_indices.size > 0:
-                    confidence = float(probs[class_indices[0]])
-                elif isinstance(pred_class, (int, np.integer)) and 0 <= pred_class < len(probs):
-                    confidence = float(probs[pred_class])
-                else:
-                    confidence = float(np.max(probs))
-            else:
-                classes = model.classes_
-                pred_idx = np.where(classes == disease)[0]
-                confidence = float(probs[pred_idx[0]]) if pred_idx.size > 0 else float(np.max(probs))
-            
-            top_indices = np.argsort(probs)[-5:][::-1]
-            for idx in top_indices:
-                if probs[idx] > 0:  # Only include predictions with non-zero probability
-                    if le is not None:
-                        pred_disease = le.inverse_transform([model.classes_[idx]])[0]
-                    else:
-                        pred_disease = model.classes_[idx]
-                    disease_info = csv_detector.get_disease_info(pred_disease) or {}
-                    top_predictions.append({
-                        'disease': pred_disease,
-                        'probability': float(probs[idx]),
-                        'specialist': disease_info.get('specialist', ''),
-                        'urgency': disease_info.get('urgency', ''),
-                        'precautions': disease_info.get('precautions', [])
-                    })
-        else:
-            confidence = 1.0
-            disease_info = csv_detector.get_disease_info(disease) or {}
-            top_predictions = [{
-                'disease': disease,
-                'probability': 1.0,
-                'specialist': disease_info.get('specialist', ''),
-                'urgency': disease_info.get('urgency', ''),
-                'precautions': disease_info.get('precautions', [])
-            }]
+        # Add specialist from top prediction first
+        if predictions:
+            top_specialist = predictions[0].get('specialist', 'General Practitioner')
+            if top_specialist and top_specialist != 'nan':
+                specialists_list.append(top_specialist)
         
-        # Specialist recommendation
-        specialists = get_specialist_for_disease(disease)
+        # Add other unique specialists from remaining predictions
+        for pred in predictions[1:]:
+            specialist = pred.get('specialist', 'General Practitioner')
+            if specialist and specialist != 'nan' and specialist not in specialists_list:
+                specialists_list.append(specialist)
+                if len(specialists_list) >= 2:  # Max 2 specialists
+                    break
         
-        response = {
+        recommended_specialists = specialists_list[:2]
+        
+        # Get main disease from top prediction
+        main_disease = predictions[0].get('disease', 'Unknown') if predictions else 'Unknown'
+        
+        return jsonify({
             'success': True,
+            'source': 'CSV Dataset (1,874 symptoms)',
             'input_text': text,
-            'detected_symptoms': matched_symptoms,
-            'symptoms_count': len(matched_symptoms),
-            'predicted_disease': disease,
-            'confidence': confidence,
-            'confidence_percentage': f"{confidence*100:.2f}%",
-            'recommended_specialists': specialists,
-            'top_predictions': top_predictions,
-            'suggestions_and_advice': top_predictions
-        }
-        
-        return jsonify(response)
+            'detected_symptoms': validated_symptoms,
+            'symptoms_count': len(validated_symptoms),
+            
+            # Fields expected by HTML template
+            'predicted_disease': main_disease,
+            'top_predictions': predictions,
+            'recommendations': predictions,
+            'suggested_conditions': predictions[1:] if len(predictions) > 1 else [],  # Other possible conditions
+            'other_conditions': predictions[1:] if len(predictions) > 1 else [],
+            'recommended_specialists': recommended_specialists,
+            
+            # Legacy field names
+            'predictions': predictions,
+            'suggestions_and_advice': predictions,
+            'top_disease': main_disease,
+            
+            'disclaimer': 'This is for informational purposes only. Always consult with a healthcare professional for diagnosis and treatment.'
+        })
     
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -938,6 +958,5 @@ def csv_stats():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

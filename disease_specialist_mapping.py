@@ -1,3 +1,10 @@
+"""
+MediFlow Symptom Checker
+
+Comprehensive mapping of diseases to medical specialists with
+intelligent matching for healthcare provider recommendations.
+"""
+
 # Comprehensive mapping of diseases to specialists
 DISEASE_SPECIALIST_MAPPING = {
     # Neurological/Psychiatric
