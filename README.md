@@ -108,6 +108,21 @@ FLASK_ENV=development
 FLASK_DEBUG=true
 ```
 
+## Deployment
+
+To make the app available on the web:
+
+1. Push this project to GitHub.
+2. Deploy on a hosting provider such as Render, Railway, or Fly.io.
+3. Set the startup command to:
+   ```bash
+   gunicorn app:app
+   ```
+4. Make sure the platform exposes the `PORT` environment variable.
+5. After deployment, connect your custom domain (for example `mediflow.health`) if you want people to search for that name.
+
+> Google will only show your site after the domain is live and indexed, so a public URL plus a custom domain is the best way to make "MediFlow" searchable.
+
 ## Troubleshooting
 
 | Issue | Solution |

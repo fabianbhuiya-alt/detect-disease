@@ -18,6 +18,7 @@ joblib
 # Web framework (API & frontend)
 flask
 flask-cors
+gunicorn
 
 # Environment variables
 python-dotenv
